@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Project Pricing Tool POC</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --panel: #ffffff;
+      --accent: #0a5ea8;
+      --text: #0f1a2a;
+      --muted: #5d6b82;
+      --error: #b31b1b;
+      --warning: #9d6200;
+      --ok: #1b7f2c;
+      --border: #d7dfea;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 24px auto;
+      padding: 0 16px 32px;
+    }
+
+    h1, h2, h3 { margin: 0 0 10px; }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    input, select, button {
+      width: 100%;
+      padding: 9px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      background: #fff;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .actions button {
+      width: auto;
+      min-width: 180px;
+      cursor: pointer;
+      border: none;
+      color: #fff;
+      background: var(--accent);
+      font-weight: 700;
+    }
+
+    .actions button.secondary {
+      background: #6b7a91;
+    }
+
+    .actions button.good {
+      background: var(--ok);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      background: #fff;
+    }
+
+    th, td {
+      border: 1px solid var(--border);
+      padding: 8px;
+      font-size: 13px;
+      vertical-align: middle;
+    }
+
+    th { background: #eef4fb; }
+
+    .line-actions {
+      display: flex;
+      justify-content: center;
+    }
+
+    .line-actions button {
+      width: auto;
+      min-width: auto;
+      background: #b31b1b;
+      color: white;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .validation-list {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    .validation-list li { margin-bottom: 6px; }
+
+    .validation-error { color: var(--error); font-weight: 700; }
+    .validation-warning { color: var(--warning); font-weight: 700; }
+    .validation-ok { color: var(--ok); font-weight: 700; }
+
+    .summary-table td:first-child { font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Project Pricing Tool POC</h1>
+    <p>Single-page browser tool to calculate total project price by category and export a summary XLSX file.</p>
+
+    <section class="panel">
+      <h2>Project Metadata</h2>
+      <div class="grid-3">
+        <div>
+          <label for="projectName">Project name</label>
+          <input id="projectName" type="text" placeholder="e.g. Pilot separation study" />
+        </div>
+        <div>
+          <label for="clientName">Client</label>
+          <input id="clientName" type="text" placeholder="e.g. Petrobras" />
+        </div>
+        <div>
+          <label for="projectCode">Project code</label>
+          <input id="projectCode" type="text" placeholder="e.g. PRJ-2026-001" />
+        </div>
+      </div>
+      <div class="grid-3" style="margin-top: 12px;">
+        <div>
+          <label for="fundingMode">Funding mode</label>
+          <select id="fundingMode">
+            <option value="SEM_FOMENTO">Sem fomento</option>
+            <option value="EMBRAPII">EMBRAPII</option>
+            <option value="ANP">ANP</option>
+            <option value="ANP_PETROBRAS">ANP Petrobras</option>
+            <option value="ANEEL">ANEEL</option>
+          </select>
+        </div>
+        <div>
+          <label for="state">State (for labor taxes context)</label>
+          <input id="state" type="text" value="RJ" />
+        </div>
+        <div>
+          <label for="currency">Currency</label>
+          <input id="currency" type="text" value="BRL" />
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Cost Lines</h2>
+      <div class="actions">
+        <button type="button" id="addLineBtn">Add cost line</button>
+        <button type="button" id="sampleBtn" class="secondary">Load sample data</button>
+      </div>
+      <table id="costLinesTable">
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th>Category</th>
+            <th>Academic title (ANP Petrobras)</th>
+            <th>Hours</th>
+            <th>Quantity</th>
+            <th>Unit price (BRL)</th>
+            <th>Actual salary/month (BRL)</th>
+            <th>Labor taxes/month (BRL)</th>
+            <th>Line total (BRL)</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="costLinesBody"></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>Validation Panel</h2>
+      <ul id="validationList" class="validation-list"></ul>
+    </section>
+
+    <section class="panel">
+      <h2>Summary</h2>
+      <div class="actions">
+        <button type="button" id="recalcBtn">Recalculate</button>
+        <button type="button" id="exportBtn" class="good">Export XLSX</button>
+      </div>
+      <div id="summaryOutput"></div>
+    </section>
+  </div>
+
+  <script>
+    const CATEGORIES = [
+      "technical personnel",
+      "administrative personnel",
+      "travel",
+      "software",
+      "equipment",
+      "consumables",
+      "third party services",
+      "indirects",
+      "operational support"
+    ];
+
+    const ACADEMIC_TITLES = ["N/A", "BSc", "MSc", "PhD", "Specialist"];
+
+    const APP_STATE = {
+      lines: []
+    };
+
+    function brl(value) {
+      return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value || 0);
+    }
+
+    function toNumber(value) {
+      const num = Number(value);
+      return Number.isFinite(num) ? num : 0;
+    }
+
+    function getMetadata() {
+      return {
+        projectName: document.getElementById("projectName").value.trim(),
+        clientName: document.getElementById("clientName").value.trim(),
+        projectCode: document.getElementById("projectCode").value.trim(),
+        fundingMode: document.getElementById("fundingMode").value,
+        state: document.getElementById("state").value.trim(),
+        currency: document.getElementById("currency").value.trim()
+      };
+    }
+
+    function newLine(initial = {}) {
+      return {
+        id: crypto.randomUUID(),
+        description: initial.description || "",
+        category: initial.category || "technical personnel",
+        academicTitle: initial.academicTitle || "N/A",
+        hours: initial.hours ?? "",
+        quantity: initial.quantity ?? 1,
+        unitPrice: initial.unitPrice ?? "",
+        actualSalary: initial.actualSalary ?? "",
+        laborTaxes: initial.laborTaxes ?? ""
+      };
+    }
+
+    function renderLines() {
+      const tbody = document.getElementById("costLinesBody");
+      tbody.innerHTML = "";
+
+      APP_STATE.lines.forEach((line) => {
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+          <td><input value="${escapeHtml(line.description)}" data-field="description" data-id="${line.id}" /></td>
+          <td>${categorySelect(line)}</td>
+          <td>${academicSelect(line)}</td>
+          <td><input type="number" min="0" value="${escapeHtml(line.hours)}" data-field="hours" data-id="${line.id}" /></td>
+          <td><input type="number" min="0" step="0.01" value="${escapeHtml(line.quantity)}" data-field="quantity" data-id="${line.id}" /></td>
+          <td><input type="number" min="0" step="0.01" value="${escapeHtml(line.unitPrice)}" data-field="unitPrice" data-id="${line.id}" /></td>
+          <td><input type="number" min="0" step="0.01" value="${escapeHtml(line.actualSalary)}" data-field="actualSalary" data-id="${line.id}" /></td>
+          <td><input type="number" min="0" step="0.01" value="${escapeHtml(line.laborTaxes)}" data-field="laborTaxes" data-id="${line.id}" /></td>
+          <td>${brl(calculateLineTotal(line, getMetadata().fundingMode).value)}</td>
+          <td class="line-actions"><button data-remove-id="${line.id}" type="button">Remove</button></td>
+        `;
+
+        tbody.appendChild(tr);
+      });
+
+      bindLineEvents();
+    }
+
+    function categorySelect(line) {
+      const options = CATEGORIES.map(cat => `<option value="${cat}" ${line.category === cat ? "selected" : ""}>${cat}</option>`).join("");
+      return `<select data-field="category" data-id="${line.id}">${options}</select>`;
+    }
+
+    function academicSelect(line) {
+      const options = ACADEMIC_TITLES.map(title => `<option value="${title}" ${line.academicTitle === title ? "selected" : ""}>${title}</option>`).join("");
+      return `<select data-field="academicTitle" data-id="${line.id}">${options}</select>`;
+    }
+
+    function bindLineEvents() {
+      document.querySelectorAll("#costLinesBody [data-field]").forEach((el) => {
+        el.addEventListener("input", onLineChange);
+      });
+
+      document.querySelectorAll("#costLinesBody [data-remove-id]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          APP_STATE.lines = APP_STATE.lines.filter(l => l.id !== btn.dataset.removeId);
+          renderLines();
+          recalculate();
+        });
+      });
+    }
+
+    function onLineChange(e) {
+      const id = e.target.dataset.id;
+      const field = e.target.dataset.field;
+      const line = APP_STATE.lines.find(l => l.id === id);
+      if (!line) return;
+      line[field] = e.target.value;
+      recalculate();
+      renderLines();
+    }
+
+    function isPersonnelCategory(category) {
+      return category === "technical personnel" || category === "administrative personnel";
+    }
+
+    /**
+     * Core rule implementation for line totals.
+     * - For ANP/ANP Petrobras personnel lines: separate actual salary and labor taxes in RJ context.
+     * - Otherwise: quantity * unitPrice.
+     *
+     * Petrobras-specific ANP formula is unknown, so we intentionally keep ANP base logic and raise warning elsewhere.
+     */
+    function calculateLineTotal(line, fundingMode) {
+      const quantity = toNumber(line.quantity) || 0;
+      const unitPrice = toNumber(line.unitPrice) || 0;
+      const hours = toNumber(line.hours) || 0;
+      const actualSalary = toNumber(line.actualSalary) || 0;
+      const laborTaxes = toNumber(line.laborTaxes) || 0;
+
+      const needsAnpLabor = (fundingMode === "ANP" || fundingMode === "ANP_PETROBRAS") && isPersonnelCategory(line.category);
+
+      if (needsAnpLabor) {
+        const hourlyBase = (actualSalary + laborTaxes) / 160; // Placeholder month-hours basis.
+        return {
+          value: hourlyBase * hours,
+          salaryPortion: (actualSalary / 160) * hours,
+          taxPortion: (laborTaxes / 160) * hours
+        };
+      }
+
+      return {
+        value: quantity * unitPrice,
+        salaryPortion: 0,
+        taxPortion: 0
+      };
+    }
+
+    function validate(metadata, lines) {
+      const messages = [];
+
+      if (!metadata.projectName) messages.push({ type: "warning", text: "Project name is empty." });
+      if (!metadata.clientName) messages.push({ type: "warning", text: "Client is empty." });
+
+      if (!lines.length) {
+        messages.push({ type: "error", text: "Add at least one cost line." });
+      }
+
+      lines.forEach((line, idx) => {
+        const lineTag = `Line ${idx + 1}`;
+        if (!line.description) messages.push({ type: "warning", text: `${lineTag}: description is empty.` });
+
+        if ((metadata.fundingMode === "ANP" || metadata.fundingMode === "ANP_PETROBRAS") && isPersonnelCategory(line.category)) {
+          const hours = Number(line.hours);
+          if (!Number.isInteger(hours) || hours <= 0) {
+            messages.push({ type: "error", text: `${lineTag}: ANP personnel hours must be a positive integer.` });
+          }
+
+          if (toNumber(line.actualSalary) <= 0) {
+            messages.push({ type: "error", text: `${lineTag}: actual salary/month must be > 0 for ANP personnel lines.` });
+          }
+
+          if (toNumber(line.laborTaxes) < 0) {
+            messages.push({ type: "error", text: `${lineTag}: labor taxes/month cannot be negative.` });
+          }
+        }
+
+        if (!(metadata.fundingMode === "ANP" || metadata.fundingMode === "ANP_PETROBRAS") || !isPersonnelCategory(line.category)) {
+          if (toNumber(line.quantity) <= 0) messages.push({ type: "error", text: `${lineTag}: quantity must be > 0.` });
+          if (toNumber(line.unitPrice) < 0) messages.push({ type: "error", text: `${lineTag}: unit price cannot be negative.` });
+        }
+      });
+
+      if (metadata.fundingMode === "ANP_PETROBRAS") {
+        messages.push({ type: "warning", text: "ANP Petrobras academic-title pricing logic and specific formula are placeholders pending user confirmation." });
+      }
+
+      if (metadata.fundingMode === "ANEEL") {
+        messages.push({ type: "warning", text: "ANEEL mode is a placeholder and currently behaves as Sem fomento." });
+      }
+
+      return messages;
+    }
+
+    function computeSummary(metadata, lines) {
+      const byCategory = {};
+      CATEGORIES.forEach(c => { byCategory[c] = 0; });
+
+      let salaryTotal = 0;
+      let taxesTotal = 0;
+
+      lines.forEach(line => {
+        const calculation = calculateLineTotal(line, metadata.fundingMode);
+        byCategory[line.category] = (byCategory[line.category] || 0) + calculation.value;
+        salaryTotal += calculation.salaryPortion;
+        taxesTotal += calculation.taxPortion;
+      });
+
+      const total = Object.values(byCategory).reduce((a, b) => a + b, 0);
+      const fundingBreakdown = calculateFundingBreakdown(metadata.fundingMode, total, byCategory);
+
+      return { byCategory, total, fundingBreakdown, salaryTotal, taxesTotal };
+    }
+
+    /**
+     * Funding source totals by mode.
+     * EMBRAPII fixed targets are explicitly applied: Client 42%, EMBRAPII 33%, SENAI 25%.
+     */
+    function calculateFundingBreakdown(mode, total, byCategory) {
+      if (mode === "EMBRAPII") {
+        const client = total * 0.42;
+        const embrapii = total * 0.33;
+        const senai = total * 0.25;
+
+        const preferredSenaiCapacity =
+          (byCategory["equipment"] || 0) +
+          (byCategory["software"] || 0) +
+          (byCategory["operational support"] || 0);
+
+        return {
+          "Client": client,
+          "EMBRAPII": embrapii,
+          "SENAI (economic counterpart)": senai,
+          "SENAI preferred allocation capacity (equipment/software/operational support)": preferredSenaiCapacity,
+          "SENAI amount requiring manual allocation": Math.max(senai - preferredSenaiCapacity, 0)
+        };
+      }
+
+      if (mode === "ANP" || mode === "ANP_PETROBRAS") {
+        return { "Total (single source placeholder)": total };
+      }
+
+      return { "Total": total };
+    }
+
+    function renderValidation(messages) {
+      const ul = document.getElementById("validationList");
+      ul.innerHTML = "";
+
+      if (!messages.length) {
+        const li = document.createElement("li");
+        li.className = "validation-ok";
+        li.textContent = "No validation issues.";
+        ul.appendChild(li);
+        return;
+      }
+
+      messages.forEach(msg => {
+        const li = document.createElement("li");
+        li.className = msg.type === "error" ? "validation-error" : "validation-warning";
+        li.textContent = `[${msg.type.toUpperCase()}] ${msg.text}`;
+        ul.appendChild(li);
+      });
+    }
+
+    function renderSummary(metadata, summary) {
+      const output = document.getElementById("summaryOutput");
+      const categoryRows = Object.entries(summary.byCategory)
+        .map(([category, value]) => `<tr><td>${category}</td><td>${brl(value)}</td></tr>`)
+        .join("");
+
+      const fundingRows = Object.entries(summary.fundingBreakdown)
+        .map(([source, value]) => `<tr><td>${source}</td><td>${brl(value)}</td></tr>`)
+        .join("");
+
+      const anpExtra = (metadata.fundingMode === "ANP" || metadata.fundingMode === "ANP_PETROBRAS")
+        ? `<h3>ANP Labor Split (Personnel lines)</h3>
+           <table class="summary-table">
+             <tr><td>Salary subtotal</td><td>${brl(summary.salaryTotal)}</td></tr>
+             <tr><td>Labor taxes subtotal</td><td>${brl(summary.taxesTotal)}</td></tr>
+           </table>`
+        : "";
+
+      output.innerHTML = `
+        <h3>Totals by Category</h3>
+        <table class="summary-table">
+          <tr><th>Category</th><th>Total</th></tr>
+          ${categoryRows}
+          <tr><td>Grand total</td><td>${brl(summary.total)}</td></tr>
+        </table>
+
+        <h3 style="margin-top: 14px;">Totals by Funding Source</h3>
+        <table class="summary-table">
+          <tr><th>Funding source</th><th>Total</th></tr>
+          ${fundingRows}
+        </table>
+
+        ${anpExtra}
+      `;
+    }
+
+    function recalculate() {
+      const metadata = getMetadata();
+      const messages = validate(metadata, APP_STATE.lines);
+      const summary = computeSummary(metadata, APP_STATE.lines);
+      renderValidation(messages);
+      renderSummary(metadata, summary);
+    }
+
+    function exportXlsx() {
+      const metadata = getMetadata();
+      const summary = computeSummary(metadata, APP_STATE.lines);
+
+      const rows = [
+        ["Project", metadata.projectName],
+        ["Client", metadata.clientName],
+        ["Project code", metadata.projectCode],
+        ["Funding mode", metadata.fundingMode],
+        [],
+        ["Category", "Total (BRL)"]
+      ];
+
+      Object.entries(summary.byCategory).forEach(([cat, value]) => {
+        rows.push([cat, Number(value.toFixed(2))]);
+      });
+
+      rows.push(["Grand total", Number(summary.total.toFixed(2))]);
+      rows.push([]);
+      rows.push(["Funding source", "Total (BRL)"]);
+
+      Object.entries(summary.fundingBreakdown).forEach(([source, value]) => {
+        rows.push([source, Number(value.toFixed(2))]);
+      });
+
+      if (metadata.fundingMode === "ANP" || metadata.fundingMode === "ANP_PETROBRAS") {
+        rows.push([]);
+        rows.push(["ANP labor split", "Total (BRL)"]);
+        rows.push(["Salary subtotal", Number(summary.salaryTotal.toFixed(2))]);
+        rows.push(["Labor taxes subtotal", Number(summary.taxesTotal.toFixed(2))]);
+      }
+
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Summary");
+      XLSX.writeFile(wb, `pricing_summary_${metadata.projectCode || "project"}.xlsx`);
+    }
+
+    function loadSampleData() {
+      document.getElementById("projectName").value = "Separation process optimization";
+      document.getElementById("clientName").value = "Demo Client";
+      document.getElementById("projectCode").value = "POC-001";
+      document.getElementById("fundingMode").value = "EMBRAPII";
+      document.getElementById("state").value = "RJ";
+
+      APP_STATE.lines = [
+        newLine({ description: "Senior process engineer", category: "technical personnel", quantity: 1, unitPrice: 42000 }),
+        newLine({ description: "Admin analyst", category: "administrative personnel", quantity: 1, unitPrice: 8500 }),
+        newLine({ description: "Site travel", category: "travel", quantity: 3, unitPrice: 2500 }),
+        newLine({ description: "Simulation software license", category: "software", quantity: 1, unitPrice: 18000 }),
+        newLine({ description: "Lab equipment usage", category: "equipment", quantity: 120, unitPrice: 140 }),
+        newLine({ description: "Operational support hours", category: "operational support", quantity: 120, unitPrice: 90 })
+      ];
+
+      renderLines();
+      recalculate();
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    document.getElementById("addLineBtn").addEventListener("click", () => {
+      APP_STATE.lines.push(newLine());
+      renderLines();
+      recalculate();
+    });
+
+    document.getElementById("sampleBtn").addEventListener("click", loadSampleData);
+    document.getElementById("recalcBtn").addEventListener("click", recalculate);
+    document.getElementById("exportBtn").addEventListener("click", exportXlsx);
+    document.getElementById("fundingMode").addEventListener("change", recalculate);
+
+    APP_STATE.lines = [newLine()];
+    renderLines();
+    recalculate();
+  </script>
+</body>
+</html>
