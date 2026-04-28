@@ -1,2 +1,3 @@
-# pricing-tool-poc
-Proof of concept of project pricing tool
+# Pricing Tool POC
+
+Initial repository for a unified project pricing tool.
